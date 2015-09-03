@@ -1,6 +1,7 @@
 #-*- coding:utf-8 –*-
 
 import json
+import time
 from datetime import date
 from scrapy import Spider,  Request
 from scrapy.selector import Selector
@@ -16,7 +17,7 @@ class ZhihuSpider(Spider):
     allowed_domains = ["zhihu.com"]
 
     # start with captcha page to get the login captcha
-    start_urls = ["http://www.zhihu.com/captcha.gif"]
+    start_urls = ["http://www.zhihu.com"]
 
     # define Xpath to extact answers
     answers_list_xpath = "//div[@class='explore-feed feed-item']"
@@ -31,7 +32,10 @@ class ZhihuSpider(Spider):
     author_link = ".//div[@class='zm-item-answer ']/div[@class='answer-head']" + \
         "/div[@class='zm-item-answer-author-info']/h3/a/@href"
     vote = ".//div[@class='zm-item-answer ']/div[@class='zm-item-vote']/a/@data-votecount"
-    summary = ".//div[@class='zm-item-answer ']" + \
+    summary_img = ".//div[@class='zm-item-answer ']" + \
+        "/div[@class='zm-item-rich-text']" + \
+        "/div[@class='zh-summary summary clearfix']/img"
+    summary_text = ".//div[@class='zm-item-answer ']" + \
         "/div[@class='zm-item-rich-text']" + \
         "/div[@class='zh-summary summary clearfix']/text()"
     answer = ".//div[@class='zm-item-answer ']" + \
@@ -44,11 +48,31 @@ class ZhihuSpider(Spider):
         "author": author,
         "author_link": author_link,
         "vote": vote,
-        "summary": summary,
+        "summary_img": summary_img,
+        "summary_text": summary_text,
         "answer": answer
     }
 
     def parse(self, response):
+        """
+        Fake login.
+        Not sure why, but in order to get the right captcha,
+        you have to fail once, then visit the captcha page and
+        get the right captcha.
+        """
+        return [FormRequest(url="http://www.zhihu.com/login/email",
+                            formdata={"email": "",
+                                      "password": "",
+                                      "remember_me": "true",
+                                      },
+                            callback=self.parse2)]
+
+    def parse2(self, response):
+        captcha_url = "http://www.zhihu.com/captcha.gif"
+
+        return Request(captcha_url, callback=self.login)
+
+    def login(self, response):
         """
         Method that performs Zhihu user login.
         """
@@ -64,6 +88,7 @@ class ZhihuSpider(Spider):
         return [FormRequest(url="http://www.zhihu.com/login/email",
                             formdata={"email": "bestofzhihu@gmail.com",
                                       "password": "shehuizhuyihao",
+                                      "remember_me": "true",
                                       "captcha": captcha},
                             callback=self.after_login)]
 
@@ -72,13 +97,13 @@ class ZhihuSpider(Spider):
         login_status = json.loads(response.body)
 
         if login_status["r"]:
-            self.logger.error("Login failed.")
+            self.logger.error(login_status["msg"])
             return
 
         # we will parse the hottest answers by day and month
-        for time in ["day", "month"]:
+        for when in ["day", "month"]:
             for offset in range(0, 50, 5):
-                params = '"offset": {0}, "type": "{1}"'.format(offset, time)
+                params = '"offset": {0}, "type": "{1}"'.format(offset, when)
                 url = 'http://www.zhihu.com/node/ExploreAnswerListV2?params={' + params + '}'
                 yield Request(url, callback=self.parse_answers)
 
@@ -102,6 +127,12 @@ class ZhihuSpider(Spider):
 
             # convert the full text of answer into html
             item["answer"] = item["answer"].encode('ascii', 'xmlcharrefreplace')
+
+            # if summary has image, convert it to html
+            if "summary_img" in item:
+                item["summary_img"] = item["summary_img"].encode('ascii', 'xmlcharrefreplace')
+            else:
+                item['summary_img'] = ""
 
             # change vote to integer
             item["vote"] = int(item["vote"])

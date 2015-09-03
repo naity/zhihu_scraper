@@ -8,6 +8,7 @@ class ZhihuAnswer(Item):
     author = Field()
     author_link = Field()
     vote = Field()
-    summary = Field()
+    summary_img = Field()
+    summary_text = Field()
     answer = Field()
     date = Field()

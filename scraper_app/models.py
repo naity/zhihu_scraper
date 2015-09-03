@@ -32,6 +32,7 @@ class Answers(DeclarativeBase):
     author = Column("author", Unicode)
     author_link = Column("author_link", Unicode, nullable=True)
     vote = Column("vote", Integer)
-    summary = Column("summary", UnicodeText)
+    summary_img = Column("summary_img", Unicode, nullable=True)
+    summary_text = Column("summary_text", UnicodeText)
     answer = Column("answer", Text)
     date = Column("date", Date)
